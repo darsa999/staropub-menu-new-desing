@@ -2,7 +2,7 @@ import React from "react";
 import { Phone, Mail, UtensilsCrossed } from "lucide-react";
 import { useLanguage } from "../context/LanguageContext";
 
-export default function Footer({ onNavHome }) {
+export default function Footer({ onNavHome, onNavAbout }) {
   const { t } = useLanguage();
 
   return (
@@ -30,7 +30,7 @@ export default function Footer({ onNavHome }) {
               </span>
             </div>
             <p className="text-sm text-zinc-400 leading-relaxed max-w-sm">
-              ტრადიციული ქართული კერძები, გამორჩეული სტუმართმოყვარეობა და უმაღლესი ხარისხის ინგრედიენტები მტკვრის სანაპიროზე.
+              საუკეთესო ჩეხური და ევროპული ლუდი, საფირმო ნეკნები და მყუდრო გარემო გლდანში.
             </p>
           </div>
 
@@ -47,10 +47,10 @@ export default function Footer({ onNavHome }) {
                 <div>
                   <span className="text-xs text-zinc-500 block">{t("phone")}</span>
                   <a
-                    href="tel:0000000"
+                    href="tel:+995595931119"
                     className="text-zinc-200 hover:text-amber-400 transition-colors font-medium"
                   >
-                    0000000
+                    +995 595 93 11 19
                   </a>
                 </div>
               </li>
@@ -61,10 +61,10 @@ export default function Footer({ onNavHome }) {
                 <div>
                   <span className="text-xs text-zinc-500 block">{t("email")}</span>
                   <a
-                    href="mailto:chashnagirisanapiro@ofoodo.com"
+                    href="mailto:staropub25@gmail.com"
                     className="text-zinc-200 hover:text-amber-400 transition-colors font-medium break-all"
                   >
-                    chashnagirisanapiro@ofoodo.com
+                    staropub25@gmail.com
                   </a>
                 </div>
               </li>
@@ -87,12 +87,13 @@ export default function Footer({ onNavHome }) {
                 </button>
               </li>
               <li>
-                <a
-                  href="#about"
-                  className="hover:text-amber-400 transition-colors text-zinc-300"
+                <button
+                  type="button"
+                  onClick={onNavAbout}
+                  className="hover:text-amber-400 transition-colors text-zinc-300 text-left"
                 >
                   {t("navAbout")}
-                </a>
+                </button>
               </li>
               <li>
                 <a
@@ -118,7 +119,7 @@ export default function Footer({ onNavHome }) {
         <div className="pt-8 flex flex-col sm:flex-row items-center justify-between text-xs text-zinc-500 space-y-3 sm:space-y-0">
           <p>{t("copyright")}</p>
           <p className="flex items-center space-x-1">
-            <span>ჭაშნაგირი სანაპირო • All Rights Reserved</span>
+            <span>StaroPub Gastro Lounge • All Rights Reserved</span>
           </p>
         </div>
       </div>

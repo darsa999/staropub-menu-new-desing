@@ -6,21 +6,47 @@ import CartDrawer from "./components/CartDrawer";
 import Footer from "./components/Footer";
 import HomePage from "./pages/HomePage";
 import CatalogPage from "./pages/CatalogPage";
+import AboutPage from "./pages/AboutPage";
+import AdminPage from "./pages/admin/AdminPage";
 import { ThemeProvider } from "./context/ThemeContext";
-import { LanguageProvider, useLanguage } from "./context/LanguageContext";
+import { LanguageProvider } from "./context/LanguageContext";
 import { CartProvider } from "./context/CartContext";
 import { useScrollSpy } from "./hooks/useScrollSpy";
 import { getMenuData } from "./services/api";
 
 function MainApp() {
-  // Current view: 'home' (Categories Grid ONLY) | 'catalog' (Grouped Products Catalog)
+  const [isAdminRoute, setIsAdminRoute] = useState(() => {
+    return (
+      window.location.pathname.startsWith("/admin") ||
+      window.location.search.includes("admin=true")
+    );
+  });
+
+  // Current view: 'home' (Categories Grid ONLY) | 'catalog' (Grouped Products Catalog) | 'about'
   const [currentView, setCurrentView] = useState("home");
   const [menuData, setMenuData] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
   const [isLangDrawerOpen, setIsLangDrawerOpen] = useState(false);
   const pendingScrollCategoryRef = useRef(null);
-  const { language } = useLanguage();
+
+  useEffect(() => {
+    const handlePopState = () => {
+      const isNowAdmin =
+        window.location.pathname.startsWith("/admin") ||
+        window.location.search.includes("admin=true");
+      setIsAdminRoute(isNowAdmin);
+    };
+    window.addEventListener("popstate", handlePopState);
+    return () => window.removeEventListener("popstate", handlePopState);
+  }, []);
+
+  const handleExitAdmin = () => {
+    window.history.pushState({}, "", "/");
+    setIsAdminRoute(false);
+    setCurrentView("home");
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  };
 
   // Load menu data grouped by category on mount
   useEffect(() => {
@@ -123,7 +149,15 @@ function MainApp() {
     window.scrollTo({ top: 0, behavior: "smooth" });
   };
 
-  // 4. When typing in search on Home View:
+  // 4. When clicking Footer "ჩვენს შესახებ":
+  // Navigates to About Us View
+  const handleNavAbout = () => {
+    setCurrentView("about");
+    setSearchQuery("");
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  };
+
+  // 5. When typing in search on Home View:
   // Automatically transitions to Catalog View with the search filter active
   const handleSearchChange = (query) => {
     setSearchQuery(query);
@@ -135,6 +169,10 @@ function MainApp() {
   const handleSelectCategoryInCatalog = (categoryId) => {
     scrollToSection(`category-${categoryId}`);
   };
+
+  if (isAdminRoute) {
+    return <AdminPage onBackToSite={handleExitAdmin} />;
+  }
 
   return (
     <div className="min-h-screen flex flex-col bg-gray-50/70 dark:bg-zinc-950 text-gray-900 dark:text-zinc-100 transition-colors duration-200">
@@ -156,7 +194,7 @@ function MainApp() {
 
       {/* Main View Router */}
       <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 pb-20">
-        {currentView === "home" ? (
+        {currentView === "home" && (
           <div className="pt-6">
             {/* VIEW 1: HOME PAGE - ONLY Categories Grid */}
             <HomePage
@@ -173,7 +211,9 @@ function MainApp() {
               }}
             />
           </div>
-        ) : (
+        )}
+
+        {currentView === "catalog" && (
           /* VIEW 2: CATALOG / PRODUCTS PAGE - Grouped Sections with Scrollspy */
           <CatalogPage
             categories={filteredMenu}
@@ -182,6 +222,11 @@ function MainApp() {
             onBackToHome={handleLogoClick}
             isLoading={isLoading}
           />
+        )}
+
+        {currentView === "about" && (
+          /* VIEW 3: ABOUT US PAGE - 360 Tour Hero & Dual Column Contacts / Map */
+          <AboutPage onBackToHome={handleLogoClick} />
         )}
       </main>
 
@@ -193,7 +238,7 @@ function MainApp() {
       <CartDrawer />
 
       {/* Dark Footer with contacts and legal links */}
-      <Footer onNavHome={handleLogoClick} />
+      <Footer onNavHome={handleLogoClick} onNavAbout={handleNavAbout} />
     </div>
   );
 }
