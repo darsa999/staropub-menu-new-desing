@@ -3,80 +3,64 @@ import { mockCategories, mockProducts } from "../data/mockData.js";
 // Resolve API Base URL and Origin safely in both browser (Vite) and Node
 const env = typeof import.meta !== "undefined" && import.meta?.env ? import.meta.env : {};
 
-// Primary API URL: Uses environment variable if defined, otherwise falls back to Vercel API path
-export const BASE_URL = (env.VITE_API_URL || "https://staropub-menu.vercel.app/api").replace(/\/+$/, "");
+// Primary API URL:
+// In browser/Vercel/Vite, defaults to relative '/api'.
+// In production: vercel.json rewrites /api/:path* to https://staropub-menu.onrender.com/api/:path* (Bypasses CORS completely)
+// In local dev: vite.config.js proxies /api to https://staropub-menu.onrender.com/api
+// In Node/SSR (without window): falls back to direct URL
+const isBrowser = typeof window !== "undefined";
+export const API_BASE_URL = (
+  env.VITE_API_URL || (isBrowser ? "/api" : "https://staropub-menu.onrender.com/api")
+).replace(/\/+$/, "");
 
-// Live production database backend (onrender): Used automatically if the primary endpoint returns 404 or fails
-export const SECONDARY_BACKEND_URL = "https://staropub-menu.onrender.com/api";
+// Direct fallback backend host
+export const DIRECT_BACKEND_URL = "https://staropub-menu.onrender.com/api";
 
 // Backward-compatible alias
-export const API_BASE_URL = BASE_URL;
+export const BASE_URL = API_BASE_URL;
 
-// Base origin for resolving relative media files (e.g. /Images/...)
-export const API_ORIGIN = BASE_URL.replace(/\/api\/?$/, "");
+// Base origin for resolving media assets (Cloudinary URLs remain untouched)
+export const API_ORIGIN = API_BASE_URL.startsWith("http")
+  ? API_BASE_URL.replace(/\/api\/?$/, "")
+  : "https://staropub-menu.onrender.com";
 
 export const USE_REAL_BACKEND = env.VITE_USE_REAL_BACKEND !== "false";
 
 const SIMULATE_LATENCY_MS = 120;
-const CACHE_KEY = "staropub_prod_menu_cache_v3";
+const CACHE_KEY = "staropub_prod_menu_cache_v4";
 
 /**
- * Resilient multi-backend fetcher.
- * 1. Attempts the primary BASE_URL (import.meta.env.VITE_API_URL || 'https://staropub-menu.vercel.app/api')
- * 2. If the primary endpoint returns 404 or fails, seamlessly falls back to the live Render production backend.
- * 3. Clearly logs diagnostic info / errors to the browser console without failing silently.
+ * Robust endpoint fetcher:
+ * 1. Queries the same-origin proxied /api route (zero CORS restrictions)
+ * 2. Falls back to direct onrender backend if needed
  */
-export async function fetchFromLiveBackend(endpointPath, options = {}) {
+export async function fetchEndpoint(endpointPath, options = {}) {
   const cleanPath = endpointPath.startsWith("/") ? endpointPath : `/${endpointPath}`;
 
-  // 1. Try primary endpoint
-  const primaryUrl = `${BASE_URL}${cleanPath}`;
+  // 1. Primary: relative /api (proxied via Vercel / Vite)
+  const primaryUrl = `${API_BASE_URL}${cleanPath}`;
   try {
-    const primaryRes = await fetch(primaryUrl, options);
-    if (primaryRes.ok) {
-      return {
-        ok: true,
-        response: primaryRes,
-        origin: BASE_URL.replace(/\/api\/?$/, ""),
-      };
+    const res = await fetch(primaryUrl, options);
+    if (res.ok) {
+      return { ok: true, response: res, url: primaryUrl };
     }
-    console.warn(
-      `[StaroPub API] Primary endpoint ${primaryUrl} returned HTTP ${primaryRes.status}. Attempting secondary backend (${SECONDARY_BACKEND_URL})...`
-    );
-  } catch (primaryErr) {
-    console.warn(
-      `[StaroPub API] Primary endpoint ${primaryUrl} failed (${primaryErr.message}). Attempting secondary backend (${SECONDARY_BACKEND_URL})...`
-    );
+    console.warn(`[StaroPub API] Proxied route ${primaryUrl} returned HTTP ${res.status}. Attempting direct backend...`);
+  } catch (err) {
+    console.warn(`[StaroPub API] Proxied route ${primaryUrl} network failure (${err.message}). Attempting direct backend...`);
   }
 
-  // 2. Try secondary production backend
-  const secondaryUrl = `${SECONDARY_BACKEND_URL}${cleanPath}`;
+  // 2. Secondary: direct onrender backend
+  const fallbackUrl = `${DIRECT_BACKEND_URL}${cleanPath}`;
   try {
-    const secondaryRes = await fetch(secondaryUrl, options);
-    if (secondaryRes.ok) {
-      return {
-        ok: true,
-        response: secondaryRes,
-        origin: SECONDARY_BACKEND_URL.replace(/\/api\/?$/, ""),
-      };
+    const res2 = await fetch(fallbackUrl, options);
+    if (res2.ok) {
+      return { ok: true, response: res2, url: fallbackUrl };
     }
-    console.error(
-      `[StaroPub API Error] Secondary backend ${secondaryUrl} returned HTTP ${secondaryRes.status}.`
-    );
-    return {
-      ok: false,
-      status: secondaryRes.status,
-      origin: SECONDARY_BACKEND_URL.replace(/\/api\/?$/, ""),
-    };
-  } catch (secErr) {
-    console.error(
-      `[StaroPub API Error] Secondary backend ${secondaryUrl} network failure: ${secErr.message}`
-    );
-    return {
-      ok: false,
-      error: secErr,
-      origin: SECONDARY_BACKEND_URL.replace(/\/api\/?$/, ""),
-    };
+    console.error(`[StaroPub API Error] Direct backend ${fallbackUrl} returned HTTP ${res2.status}.`);
+    return { ok: false, status: res2.status };
+  } catch (err2) {
+    console.error(`[StaroPub API Error] Direct backend ${fallbackUrl} network failure: ${err2.message}`);
+    return { ok: false, error: err2 };
   }
 }
 
@@ -290,22 +274,26 @@ function getMockMenuData() {
 
 /**
  * Fetch full grouped menu data (categories with nested products).
- * Seamlessly pulls from live production API with intelligent dual backend fallback.
+ * Concurrently fetches /api/categories, /api/dishes, and /api/settings,
+ * then groups and transforms them directly in memory.
  */
 export async function getMenuData() {
   if (USE_REAL_BACKEND) {
     try {
-      // 1. Fetch categories, dishes, and settings concurrently
+      // Concurrently query categories and dishes
       const [catResult, dishesResult, settingsResult] = await Promise.all([
-        fetchFromLiveBackend("/categories"),
-        fetchFromLiveBackend("/dishes"),
-        fetchFromLiveBackend("/settings"),
+        fetchEndpoint("/categories"),
+        fetchEndpoint("/dishes"),
+        fetchEndpoint("/settings"),
       ]);
 
       if (catResult.ok && dishesResult.ok) {
         const rawCategories = await catResult.response.json();
         const rawDishes = await dishesResult.response.json();
-        const settingsData = settingsResult.ok ? await settingsResult.response.json() : {};
+        const settingsData = settingsResult.ok
+          ? await settingsResult.response.json().catch(() => ({}))
+          : {};
+
         const unavailableSet = new Set(
           Array.isArray(settingsData?.unavailableDishIds) ? settingsData.unavailableDishIds : []
         );
@@ -313,41 +301,21 @@ export async function getMenuData() {
         const transformed = transformMenuData(
           rawCategories,
           rawDishes,
-          catResult.origin || API_ORIGIN,
+          API_ORIGIN,
           unavailableSet
         );
 
-        try {
-          if (typeof localStorage !== "undefined") {
-            localStorage.setItem(CACHE_KEY, JSON.stringify(transformed));
-          }
-        } catch {}
-
-        console.log("Fetched live categories:", transformed);
-        console.info(
-          `[StaroPub API] Loaded ${transformed.length} categories and ${rawDishes.length} dishes from live backend (${catResult.origin}).`
-        );
-        return transformed;
-      }
-
-      // 2. Alternative route: GET /menu
-      const menuResult = await fetchFromLiveBackend("/menu");
-      if (menuResult.ok) {
-        const data = await menuResult.response.json();
-        if (Array.isArray(data)) {
-          return data;
-        }
-        if (data.categories && data.dishes) {
-          const transformed = transformMenuData(
-            data.categories,
-            data.dishes,
-            menuResult.origin || API_ORIGIN
-          );
+        if (Array.isArray(transformed) && transformed.length > 0) {
           try {
             if (typeof localStorage !== "undefined") {
               localStorage.setItem(CACHE_KEY, JSON.stringify(transformed));
             }
           } catch {}
+
+          console.log("Fetched live categories:", transformed);
+          console.info(
+            `[StaroPub API] Loaded ${transformed.length} categories and ${rawDishes.length} dishes via ${catResult.url}.`
+          );
           return transformed;
         }
       }
@@ -355,19 +323,22 @@ export async function getMenuData() {
       console.error("[StaroPub API Error] Failed to fetch live menu data:", err);
     }
 
-    // 3. Fallback to cached production menu in localStorage
+    // Fallback to cached production menu in localStorage
     try {
       if (typeof localStorage !== "undefined") {
         const cached = localStorage.getItem(CACHE_KEY);
         if (cached) {
-          console.warn("[StaroPub API] Using cached live production menu from localStorage.");
-          return JSON.parse(cached);
+          const parsed = JSON.parse(cached);
+          if (Array.isArray(parsed) && parsed.length > 0) {
+            console.warn("[StaroPub API] Using previously cached live production menu from localStorage.");
+            return parsed;
+          }
         }
       }
     } catch {}
   }
 
-  // 4. Log visible error before falling back to local static mock data
+  // Log visible error before falling back to local static mock data
   console.error(
     "[StaroPub API Error] Live production API is unreachable and no cache exists. Falling back to static mockData.js."
   );
@@ -387,14 +358,14 @@ export async function getCategories() {
   if (USE_REAL_BACKEND) {
     try {
       const [catResult, dishResult] = await Promise.all([
-        fetchFromLiveBackend("/categories"),
-        fetchFromLiveBackend("/dishes"),
+        fetchEndpoint("/categories"),
+        fetchEndpoint("/dishes"),
       ]);
 
       if (catResult.ok) {
         const rawCategories = await catResult.response.json();
         const rawDishes = dishResult.ok ? await dishResult.response.json() : [];
-        return transformMenuData(rawCategories, rawDishes, catResult.origin || API_ORIGIN);
+        return transformMenuData(rawCategories, rawDishes, API_ORIGIN);
       }
     } catch (err) {
       console.error("[StaroPub API Error] Categories fetch failed:", err);
@@ -431,14 +402,14 @@ export async function getProducts(categoryIdOrOptions = null, searchQueryParam =
       if (search.trim()) params.append("search", search.trim());
 
       const query = params.toString() ? `?${params.toString()}` : "";
-      let resResult = await fetchFromLiveBackend(`/products${query}`);
+      let resResult = await fetchEndpoint(`/products${query}`);
       if (!resResult.ok) {
-        resResult = await fetchFromLiveBackend("/dishes");
+        resResult = await fetchEndpoint("/dishes");
       }
 
       if (resResult.ok) {
         const rawDishes = await resResult.response.json();
-        let products = rawDishes.map((d) => adaptDishToProduct(d, resResult.origin || API_ORIGIN));
+        let products = rawDishes.map((d) => adaptDishToProduct(d, API_ORIGIN));
 
         if (categoryId && categoryId !== "all") {
           products = products.filter(

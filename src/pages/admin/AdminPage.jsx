@@ -2,8 +2,8 @@ import React, { useState, useEffect, useCallback } from "react";
 import OriginalAdminDashboard, { resolveImageSrc } from "../../components/admin/OriginalAdminDashboard";
 import { auth, googleProvider, signInWithPopup } from "../../admin/firebase";
 
-const RAW_API_URL = import.meta.env.VITE_API_URL || "https://staropub-menu.onrender.com";
-const API_URL = RAW_API_URL.replace(/\/api\/?$/, "").replace(/\/+$/, "");
+const RAW_API_URL = import.meta.env.VITE_API_URL || "";
+const API_URL = RAW_API_URL ? RAW_API_URL.replace(/\/api\/?$/, "").replace(/\/+$/, "") : "";
 
 const getTimestampedUrl = (url) => {
   if (!url) return "";
