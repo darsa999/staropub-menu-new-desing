@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from "react";
 
-const API_URL = import.meta.env.VITE_API_URL || "https://staropub-menu.onrender.com";
+const RAW_API_URL = import.meta.env.VITE_API_URL || "https://staropub-menu.onrender.com";
+const API_URL = RAW_API_URL.replace(/\/api\/?$/, "").replace(/\/+$/, "");
 
 const getTimestampedUrl = (url) => {
   if (!url) return "";
