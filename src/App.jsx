@@ -15,12 +15,8 @@ import { useScrollSpy } from "./hooks/useScrollSpy";
 import { getMenuData } from "./services/api";
 
 function MainApp() {
-  const [isAdminRoute, setIsAdminRoute] = useState(() => {
-    return (
-      window.location.pathname.startsWith("/admin") ||
-      window.location.search.includes("admin=true")
-    );
-  });
+  const [mounted, setMounted] = useState(false);
+  const [isAdminRoute, setIsAdminRoute] = useState(false);
 
   // Current view: 'home' (Categories Grid ONLY) | 'catalog' (Grouped Products Catalog) | 'about'
   const [currentView, setCurrentView] = useState("home");
@@ -31,37 +27,58 @@ function MainApp() {
   const pendingScrollCategoryRef = useRef(null);
 
   useEffect(() => {
-    const handlePopState = () => {
+    setMounted(true);
+    if (typeof window !== "undefined") {
       const isNowAdmin =
         window.location.pathname.startsWith("/admin") ||
         window.location.search.includes("admin=true");
       setIsAdminRoute(isNowAdmin);
+    }
+
+    const handlePopState = () => {
+      if (typeof window !== "undefined") {
+        const isNowAdmin =
+          window.location.pathname.startsWith("/admin") ||
+          window.location.search.includes("admin=true");
+        setIsAdminRoute(isNowAdmin);
+      }
     };
     window.addEventListener("popstate", handlePopState);
     return () => window.removeEventListener("popstate", handlePopState);
   }, []);
 
   const handleExitAdmin = () => {
-    window.history.pushState({}, "", "/");
+    if (typeof window !== "undefined") {
+      window.history.pushState({}, "", "/");
+      window.scrollTo({ top: 0, behavior: "smooth" });
+    }
     setIsAdminRoute(false);
     setCurrentView("home");
-    window.scrollTo({ top: 0, behavior: "smooth" });
   };
 
   // Load menu data grouped by category on mount
   useEffect(() => {
+    let isCancelled = false;
     async function loadData() {
       try {
         setIsLoading(true);
         const data = await getMenuData();
-        setMenuData(data);
+        if (!isCancelled) {
+          console.log("Fetched live categories:", data);
+          setMenuData(Array.isArray(data) ? data : []);
+        }
       } catch (err) {
         console.error("Failed to fetch menu data:", err);
       } finally {
-        setIsLoading(false);
+        if (!isCancelled) {
+          setIsLoading(false);
+        }
       }
     }
     loadData();
+    return () => {
+      isCancelled = true;
+    };
   }, []);
 
   // Category-Preserving Live Search:
@@ -170,7 +187,7 @@ function MainApp() {
     scrollToSection(`category-${categoryId}`);
   };
 
-  if (isAdminRoute) {
+  if (mounted && isAdminRoute) {
     return <AdminPage onBackToSite={handleExitAdmin} />;
   }
 

@@ -105,14 +105,27 @@ export const LANGUAGES = [
 ];
 
 export function LanguageProvider({ children }) {
-  const [language, setLanguage] = useState(() => {
-    return localStorage.getItem("app_lang") || "ka";
-  });
+  // Safe initial state matching server/HTML default
+  const [language, setLanguage] = useState("ka");
+  const [mounted, setMounted] = useState(false);
 
   useEffect(() => {
-    localStorage.setItem("app_lang", language);
-    document.documentElement.lang = language;
-  }, [language]);
+    setMounted(true);
+    try {
+      const saved = localStorage.getItem("app_lang");
+      if (saved && ["ka", "en", "ru"].includes(saved)) {
+        setLanguage(saved);
+      }
+    } catch {}
+  }, []);
+
+  useEffect(() => {
+    if (!mounted) return;
+    try {
+      localStorage.setItem("app_lang", language);
+      document.documentElement.lang = language;
+    } catch {}
+  }, [language, mounted]);
 
   const t = (key) => {
     return translations[language]?.[key] || translations.ka[key] || key;

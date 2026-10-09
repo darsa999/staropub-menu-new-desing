@@ -323,6 +323,7 @@ export async function getMenuData() {
           }
         } catch {}
 
+        console.log("Fetched live categories:", transformed);
         console.info(
           `[StaroPub API] Loaded ${transformed.length} categories and ${rawDishes.length} dishes from live backend (${catResult.origin}).`
         );
